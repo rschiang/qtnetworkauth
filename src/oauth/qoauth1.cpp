@@ -175,13 +175,21 @@ QNetworkReply *QOAuth1Private::requestToken(QNetworkAccessManager::Operation ope
 
     QAbstractOAuth::Stage stage = QAbstractOAuth::Stage::RequestingTemporaryCredentials;
     QVariantMap headers;
+    QVariantMap remainingParameters;
     appendCommonHeaders(&headers);
-    headers.insert(Key::oauthCallback, q->callback());
+    for (auto it = parameters.begin(), end = parameters.end(); it != end; ++it) {
+        auto const key = it.key();
+        auto const value = it.value().toString();
+        if (key.startsWith(QStringLiteral("oauth_")))
+            headers.insert(key, value);
+        else
+            remainingParameters.insert(key, value);
+    }
     if (!token.first.isEmpty()) {
         headers.insert(Key::oauthToken, token.first);
         stage = QAbstractOAuth::Stage::RequestingAccessToken;
     }
-    appendSignature(stage, &headers, url, operation, parameters);
+    appendSignature(stage, &headers, url, operation, remainingParameters);
 
     request.setRawHeader("Authorization", q->generateAuthorizationHeader(headers));
 
@@ -189,13 +197,13 @@ QNetworkReply *QOAuth1Private::requestToken(QNetworkAccessManager::Operation ope
     if (operation == QNetworkAccessManager::GetOperation) {
         if (parameters.size() > 0) {
             QUrl url = request.url();
-            url.setQuery(QOAuth1Private::createQuery(parameters));
+            url.setQuery(QOAuth1Private::createQuery(remainingParameters));
             request.setUrl(url);
         }
         reply = networkAccessManager()->get(request);
     }
     else if (operation == QNetworkAccessManager::PostOperation) {
-        QUrlQuery query = QOAuth1Private::createQuery(parameters);
+        QUrlQuery query = QOAuth1Private::createQuery(remainingParameters);
         const QByteArray data = query.toString(QUrl::FullyEncoded).toUtf8();
         request.setHeader(QNetworkRequest::ContentTypeHeader,
                           QStringLiteral("application/x-www-form-urlencoded"));
@@ -843,8 +851,11 @@ void QOAuth1::grant()
     }
 
     // requesting temporary credentials
+    QVariantMap parameters;
+    parameters.insert(Key::oauthCallback, callback());
     auto reply = requestTemporaryCredentials(QNetworkAccessManager::PostOperation,
-                                             d->temporaryCredentialsUrl);
+                                             d->temporaryCredentialsUrl,
+                                             parameters);
     connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
 }
 
