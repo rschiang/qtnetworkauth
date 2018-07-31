@@ -176,7 +176,9 @@ QNetworkReply *QOAuth1Private::requestToken(QNetworkAccessManager::Operation ope
     QAbstractOAuth::Stage stage = QAbstractOAuth::Stage::RequestingTemporaryCredentials;
     QVariantMap headers;
     appendCommonHeaders(&headers);
-    headers.insert(Key::oauthCallback, q->callback());
+    for (auto it = parameters.begin(), end = parameters.end(); it != end; ++it)
+        if (it.key().startsWith("oauth_"))
+            headers.insert(it.key(), it.value());
     if (!token.first.isEmpty()) {
         headers.insert(Key::oauthToken, token.first);
         stage = QAbstractOAuth::Stage::RequestingAccessToken;
@@ -843,8 +845,11 @@ void QOAuth1::grant()
     }
 
     // requesting temporary credentials
+    QVariantMap parameters;
+    parameters.insert(Key::oauthCallback, callback());
     auto reply = requestTemporaryCredentials(QNetworkAccessManager::PostOperation,
-                                             d->temporaryCredentialsUrl);
+                                             d->temporaryCredentialsUrl,
+                                             parameters);
     connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
 }
 
